@@ -1,0 +1,17 @@
+# Documentation-only addresses (RFC 5737). Replace them in a private inventory.
+# Copy to pt.ini for local preparation; *.ini in inventory/ is ignored by Git.
+[ogg_DC]
+ogg-dc ansible_host=192.0.2.10 ansible_password="{{ ogg_ansible_password }}"
+
+[ogg_DR]
+ogg-dr ansible_host=192.0.2.20 ansible_password="{{ ogg_ansible_password }}"
+
+[ogg:children]
+ogg_DC
+ogg_DR
+
+[ogg:vars]
+ansible_user=localpwm
+ansible_port=22
+# Provision trusted host keys in the Ansible container before running the job.
+ansible_ssh_common_args='-o StrictHostKeyChecking=yes'

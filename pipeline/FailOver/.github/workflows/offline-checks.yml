@@ -1,0 +1,37 @@
+name: Offline checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install test dependencies
+        run: |
+          python -m pip install -r requirements-dev.txt
+          sudo apt-get update
+          sudo apt-get install --yes groovy
+      - name: Check Bash syntax without running services
+        run: bash -n scripts/start_ogg_services.sh
+      - name: Check generated Ansible contracts
+        run: python -I -B tests/ogg/test_start_ogg_contract.py -v
+      - name: Check startup credential configuration in isolation
+        run: python -I -B tests/ogg/test_startup_credentials.py -v
+      - name: Check mocked Jenkins workflow
+        run: groovy tests/ogg/validate_start_service.groovy
