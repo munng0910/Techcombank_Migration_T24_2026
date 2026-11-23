@@ -1,0 +1,17 @@
+* text=auto
+
+# Linux hosts and offline Bash tests require LF regardless of Git for Windows.
+*.sh text eol=lf
+*.groovy text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.ini text eol=lf
+*.html text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+*.docx -text
+*.png -text
+*.jpg -text
