@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Hướng dẫn vận hành OGG qua Jenkins, cú pháp 8 action, kiểm soát switchover và danh mục evidence nội bộ.">
+<title>OGG Operational &amp; Switchover</title>
+<style>
+/* Archify-inspired technical reader: fixed-width index beside a continuous operational runbook. */
+:root {
+  color-scheme: dark;
+  --bg: #080f1d; --surface: #101b2c; --fg: #e3eaf4; --muted: #a2b2c7; --accent: #72d8ed; --warning: #f5c77a;
+  --line: color-mix(in srgb, var(--muted) 24%, transparent);
+  --soft: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  --warn-bg: color-mix(in srgb, var(--warning) 8%, var(--surface));
+  --display: "Bahnschrift", "Segoe UI", Arial, sans-serif;
+  --body: "Segoe UI", Arial, sans-serif;
+  --mono: "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  --rail: 246px; --radius: 9px;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) { color-scheme: light; --bg: #f4f5f7; --surface: #ffffff; --fg: #182438; --muted: #526176; --accent: #006a82; --warning: #80530b; }
+}
+:root[data-theme="light"] { color-scheme: light; --bg: #f4f5f7; --surface: #ffffff; --fg: #182438; --muted: #526176; --accent: #006a82; --warning: #80530b; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.72 var(--body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 20; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { text-decoration-thickness: 2px; }
+button { font: inherit; cursor: pointer; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+button, summary { -webkit-tap-highlight-color: transparent; }
+.skip { position: absolute; left: 16px; top: -100px; padding: 10px 16px; background: var(--surface); z-index: 30; }
+.skip:focus { top: 12px; }
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 15; background: var(--bg); border-bottom: 1px solid var(--line); }
+.top-inner { max-width: 1480px; margin-inline: auto; min-height: 68px; padding-block: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-mark { font: 700 13px/1 var(--mono); color: var(--accent); border: 1px solid var(--accent); padding: 10px 8px; border-radius: 5px; }
+.brand strong { font: 600 17px/1.25 var(--display); }
+.brand small { display: block; color: var(--muted); font-size: 12px; }
+.toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tag { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px; color: var(--muted); font: 12px/1.6 var(--mono); }
+.tag.warning { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+.control { background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 5px; padding: 6px 11px; font-size: 13px; }
+.control:hover { border-color: var(--accent); }
+.layout { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); gap: 42px; max-width: 1320px; margin-inline: auto; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.rail { min-width: 0; }
+.rail-inner { position: sticky; top: calc(94px + env(safe-area-inset-top, 0px)); max-height: calc(100dvh - 120px); overflow-y: auto; padding-right: 14px; }
+.eyebrow { font: 600 11px/1.6 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.index { display: grid; gap: 3px; margin-top: 16px; }
+.index a { color: var(--muted); text-decoration: none; font-size: 13px; padding: 7px 10px; border-radius: 5px; }
+.index a:hover, .index a[aria-current="location"] { background: var(--soft); color: var(--accent); }
+.rail-note { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; color: var(--muted); font-size: 12px; }
+.rail-note p { margin: 0 0 10px; }
+main, section, article, .pair > *, .step-body { min-width: 0; }
+main { max-width: 960px; }
+header.hero { padding-bottom: 34px; border-bottom: 1px solid var(--line); }
+.hero h1 { font: 600 clamp(30px, 4vw, 46px)/1.15 var(--display); letter-spacing: -.025em; max-width: 770px; margin: 15px 0 20px; text-wrap: balance; }
+.hero .lead { max-width: 760px; font-size: 18px; color: var(--muted); margin: 0 0 20px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; }
+section { padding-block: 36px; border-bottom: 1px solid var(--line); }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+h2 { font: 600 25px/1.35 var(--display); letter-spacing: -.015em; margin: 0; text-wrap: balance; }
+h3 { font: 600 18px/1.4 var(--display); margin: 24px 0 10px; text-wrap: balance; }
+h4 { font-size: 16px; margin: 0 0 6px; }
+p { margin: 0 0 14px; }
+p:last-child { margin-bottom: 0; }
+ul, ol { padding-left: 23px; margin: 10px 0 18px; }
+li { margin-block: 6px; }
+li::marker { color: var(--muted); }
+.reading { max-width: 74ch; }
+.muted, .caption { color: var(--muted); }
+.caption { font-size: 13px; }
+code, pre, kbd { font-family: var(--mono); }
+code { color: var(--accent); font-size: .87em; overflow-wrap: anywhere; }
+pre { margin: 0; font-size: 12.5px; line-height: 1.8; overflow-x: auto; max-width: 100%; padding: 18px; background: var(--surface); color: var(--fg); tab-size: 2; }
+pre code { color: inherit; overflow-wrap: normal; font-size: inherit; }
+.codebox { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-block: 12px 20px; min-width: 0; }
+.code-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; background: var(--soft); border-bottom: 1px solid var(--line); }
+.code-head span { font: 11px/1.5 var(--mono); color: var(--muted); }
+.copy { font-size: 12px; padding: 3px 8px; }
+.note { padding: 18px 20px; background: var(--soft); border: 1px solid var(--line); border-radius: var(--radius); margin-block: 18px; }
+.note.warning { background: var(--warn-bg); border-color: color-mix(in srgb, var(--warning) 38%, transparent); }
+.note strong.label { display: block; color: var(--accent); margin-bottom: 6px; font-size: 14px; }
+.note.warning strong.label { color: var(--warning); }
+.note p, .note li { font-size: 14px; }
+.note ul { margin-bottom: 0; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-block: 20px; }
+.pair article { border-top: 2px solid var(--line); padding-top: 16px; }
+.pair h3 { margin-top: 0; }
+.table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); margin-block: 14px 20px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; text-align: left; }
+caption { text-align: left; padding: 12px 14px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; background: var(--surface); }
+th, td { padding: 12px 14px; vertical-align: top; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+.action-table { min-width: 690px; }
+.param-table { min-width: 650px; }
+.evidence-table { min-width: 640px; }
+.steps { list-style: none; counter-reset: stage; padding: 0; margin: 20px 0 0; display: grid; gap: 22px; }
+.steps > li { counter-increment: stage; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 15px; margin: 0; }
+.steps > li::before { content: counter(stage, decimal-leading-zero); font: 12px/30px var(--mono); color: var(--accent); height: 32px; width: 32px; border: 1px solid var(--line); border-radius: 6px; text-align: center; background: var(--surface); }
+.step-body > h3 { margin: 2px 0 8px; font-size: 18px; }
+.step-body > p, .step-body > ul { font-size: 14px; }
+.gate { color: var(--accent); font-size: 13px; }
+.sequence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font: 12px/1.6 var(--mono); margin-block: 18px; }
+.sequence span { color: var(--muted); }
+.sequence b { color: var(--accent); font-weight: 500; }
+.sources { display: grid; gap: 14px; padding-left: 23px; }
+.sources li { margin: 0; font-size: 14px; }
+.sources small { display: block; color: var(--muted); }
+footer { padding-top: 28px; font-size: 12px; color: var(--muted); }
+#copy-status { min-height: 20px; font-size: 12px; color: var(--accent); }
+@media (max-width: 1000px) { :root { --rail: 200px; } .layout { gap: 26px; } }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 26px; padding-block: 22px 40px; }
+  .rail-inner { position: static; max-height: none; padding: 0; }
+  .index { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+  .index a { font-size: 12px; border: 1px solid var(--line); padding: 5px 9px; }
+  .rail-note { display: none; }
+  .top-inner { gap: 8px; }
+  .brand strong { font-size: 14px; }
+  .brand small { font-size: 11px; }
+  .toolbar > .tag { display: none; }
+  .control { font-size: 12px; }
+  .pair { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .hero .lead { font-size: 16px; }
+  section { padding-block: 28px; }
+  h2 { font-size: 23px; }
+  .note { padding: 15px; }
+  .steps > li { gap: 10px; grid-template-columns: 30px minmax(0, 1fr); }
+  .steps > li::before { width: 28px; height: 30px; line-height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+@media print {
+  :root { color-scheme: light; --bg: #ffffff; --surface: #f5f7fa; --fg: #182438; --muted: #526176; --accent: #006a82; --warning: #80530b; }
+  .topbar, .rail, .copy, .skip, #copy-status { display: none; }
+  .layout { display: block; padding: 0; }
+  main { max-width: none; }
+  body { font-size: 10pt; }
+  section { padding-block: 18px; }
+  .table-wrap, pre { overflow: visible; }
+  table { min-width: 0 !important; font-size: 9pt; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+  tr, .note, .steps > li { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#noi-dung">Đến nội dung báo cáo</a>
+<div class="topbar">
+  <div class="top-inner">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">OGG</span><div><strong>Operational &amp; Switchover</strong><small>Hướng dẫn vận hành · Jenkins / GoldenGate MA</small></div></div>
+    <div class="toolbar"><span class="tag">INTERNAL · RUNBOOK</span><button class="control" id="theme-toggle" type="button" aria-label="Đổi giao diện sáng hoặc tối">Đổi giao diện</button></div>
+  </div>
+</div>
+<div class="layout">
+  <aside class="rail" aria-label="Mục lục báo cáo">
+    <div class="rail-inner">
+      <div class="eyebrow">Trong tài liệu này</div>
+      <nav class="index" id="index">
+        <a href="#pham-vi">Phạm vi &amp; nguyên tắc</a>
+        <a href="#chuan-bi">Điều kiện trước khi chạy</a>
+        <a href="#tham-so">Tham số &amp; 8 action</a>
+        <a href="#jenkins">Chạy Jenkins từng bước</a>
+        <a href="#lenh">Cú pháp &amp; ví dụ script</a>
+        <a href="#wildcard">Kiểm soát wildcard</a>
+        <a href="#switchover">Quy trình switchover</a>
+        <a href="#ket-qua">Đọc kết quả &amp; nghiệm thu</a>
+        <a href="#su-co">Xử lý khi không đạt</a>
+        <a href="#evidence">Links &amp; evidence</a>
+        <a href="#nguon">Nguồn &amp; khác biệt phiên bản</a>
+      </nav>
+      <div class="rail-note"><p><strong>Đối tượng sử dụng</strong><br>DBA / OGG Operations, người thực thi Jenkins và người phê duyệt thay đổi.</p><p>Mỗi build local = một action tại một site. Không coi đây là cơ chế switchover tự động đã được xác nhận.</p><p>Tài liệu tĩnh, không kết nối Jenkins, Vault hay OGG.</p></div>
+    </div>
+  </aside>
+  <main id="noi-dung">
+    <header class="hero">
+      <div class="eyebrow">Oracle GoldenGate · Microservices Architecture</div>
+      <h1>Hướng dẫn OGG Operational &amp; Switchover</h1>
+      <p class="lead">Chọn đúng site, thực thi đúng đối tượng, kiểm tra đúng trạng thái. Hướng dẫn thao tác Jenkins và script, kèm các điểm kiểm soát khi phối hợp chuyển đổi DC / DR.</p>
+      <div class="meta"><span class="tag">Tài liệu hướng dẫn · v1.0</span><span class="tag">Biên soạn: 29/10/2026</span><span class="tag warning">Evidence chưa xác minh</span></div>
+    </header>
+
+    <section id="pham-vi" aria-labelledby="h-pham-vi">
+      <div class="section-head"><h2 id="h-pham-vi">Phạm vi &amp; nguyên tắc</h2><span class="eyebrow">Đọc trước khi vận hành</span></div>
+      <p class="reading">Báo cáo dựa trên hai tài liệu yêu cầu và đặc tả script được chỉ định trong <a href="report.md">report.md</a>. Các file Jenkins/script local được dùng để bổ sung cách thao tác và chỉ ra khác biệt phiên bản; chúng không thay thế việc kiểm tra mã thực sự đang triển khai.</p>
+      <div class="pair">
+        <article><h3>Vận hành OGG</h3><p>Hướng dẫn đủ 8 action start/stop cho Extract, Replicat, Deployment và ServiceManager. Phần Jenkins mô tả bản local hiện hành, có lựa chọn profile, xác nhận trước khi chạy và wildcard.</p></article>
+        <article><h3>Phối hợp switchover</h3><p>Đưa ra trình tự kiểm soát, điều kiện chuyển bước và bàn giao. Hai tài liệu nguồn chưa định nghĩa topology, điểm cutover, chuyển role database hay cơ chế fencing; cần bổ sung kế hoạch đã phê duyệt trước khi thực thi.</p></article>
+      </div>
+      <div class="note warning"><strong class="label">Không coi tên file hoặc build number là bằng chứng thành công</strong><p>Link <code>Jenkinsfile_OGG_operation_SwitchOver.groovy</code> và các run #40–#42 được cung cấp để tham chiếu. Chưa truy cập nội dung nội bộ, chưa biết action/site/trạng thái từng run và chưa xác nhận pipeline remote có orchestration switchover. Các Jenkinsfile local chỉ chạy một action trên một site/host cho mỗi build.</p></div>
+      <ul class="reading">
+        <li>Chỉ thao tác trong cửa sổ thay đổi và phạm vi được phê duyệt. Ưu tiên process cụ thể, không mặc định dùng <code>'*'</code>.</li>
+        <li><code>CREDENTIAL_NAME</code> là alias AdminClient có sẵn; không nhập password hoặc nhầm với Jenkins credential ID.</li>
+        <li>Build thành công không tự chứng minh replication đã đồng bộ hoặc switchover hoàn tất.</li>
+        <li>Không có rollback tự động. Một thao tác bulk thất bại có thể đã thay đổi một phần đối tượng.</li>
+      </ul>
+    </section>
+
+    <section id="chuan-bi" aria-labelledby="h-chuan-bi">
+      <div class="section-head"><h2 id="h-chuan-bi">Điều kiện trước khi chạy</h2><span class="eyebrow">Pre-flight</span></div>
+      <ol>
+        <li><strong>Chốt phạm vi thay đổi.</strong> Ghi change/ticket, environment, DC hoặc DR, hostname dự kiến, chiều replication, deployment/process, trạng thái trước và sau thao tác. Với switchover, xác định site nguồn và đích theo role thực tế, không mặc định DC luôn là nguồn.</li>
+        <li><strong>Đối chiếu phiên bản job và script.</strong> Xem SCM revision của build, xác nhận script trên host tại <code>/home/oracle/profile/op_ogg_actions.sh</code>. Job không tự triển khai script hay profile. Chỉ áp dụng hướng dẫn wildcard khi phiên bản thực tế hỗ trợ.</li>
+        <li><strong>Kiểm tra inventory và tài khoản.</strong> Group site phải có đúng một host dự kiến. Bản local SSH bằng <code>localpwm</code>, sudo thành <code>oracle</code> và kiểm tra <code>id -un</code>. Kiểm tra đường truyền, sudo và secret theo quy trình được cấp quyền; không đưa secret vào evidence.</li>
+        <li><strong>Kiểm tra môi trường OGG.</strong> Script/profile phải tồn tại và đọc được bởi <code>oracle</code>. Xác nhận <code>SM_HOME</code>, <code>OGG_HOME</code>, AdminClient, endpoint và credential alias đúng. Native start/stop script phải executable.</li>
+        <li><strong>Kiểm tra TLS trong session chạy script.</strong> Giữ <code>OGG_INSECURE_TLS=false</code>; CA phải tồn tại và đọc được. Source profile và chạy script trong cùng session Bash. Chỉ bỏ kiểm tra TLS khi có phê duyệt cho endpoint cụ thể.</li>
+        <li><strong>Ghi baseline và người chịu trách nhiệm.</strong> Lưu trạng thái process, lag/checkpoint, health deployment/SM và các lỗi đang có. Chuẩn bị người phê duyệt, DBA/OGG owner, application owner và phương án dừng/khôi phục.</li>
+      </ol>
+      <div class="table-wrap"><table><caption>Mapping bổ sung từ Jenkinsfile local hiện hành; phải đối chiếu job đang triển khai.</caption><thead><tr><th>Hạng mục</th><th>Cấu hình tham chiếu</th><th>Điểm cần kiểm tra</th></tr></thead><tbody>
+        <tr><td>Site DC / DR</td><td><code>DC → ogg_DC</code><br><code>DR → ogg_DR</code></td><td>Đúng một host trong group site; không lấy inventory sample làm bằng chứng host thực chạy.</td></tr>
+        <tr><td>Inventory</td><td><code>inventory/database/t24/&lt;prod|dev&gt;/&lt;ENVIRONMENT&gt;.ini</code></td><td>Tier do Jenkins controller được cấu hình quyết định, không phải một lựa chọn prod/dev độc lập.</td></tr>
+        <tr><td>Profile</td><td><code>OGG for Oracle</code> / <code>OGG for DAA</code></td><td>Bản local dùng đường dẫn profile có hậu tố <code>_test</code>. Xác nhận lại trên môi trường đích, không xem đây là đường dẫn production đã xác thực.</td></tr>
+        <tr><td>Đồng thời</td><td>Jenkins <code>disableConcurrentBuilds()</code> và lock của script</td><td>Chặn cùng job/lock scope, không thay thế điều phối liên job hoặc liên site. Không tự xóa lock khi chưa xác nhận owner.</td></tr>
+      </tbody></table></div>
+      <div class="note"><strong class="label">Alias phải có sẵn trong đúng ngữ cảnh OS</strong><p>AdminClient dùng credential store của tài khoản thực thi. Alias tồn tại trong session người khác chưa chứng minh <code>oracle</code> chạy qua Jenkins có thể sử dụng. Không tạo/sửa credential trong lần chạy operational.</p></div>
+    </section>
+
+    <section id="tham-so" aria-labelledby="h-tham-so">
+      <div class="section-head"><h2 id="h-tham-so">Tham số &amp; 8 action</h2><span class="eyebrow">Chọn đúng phạm vi</span></div>
+      <p>Bản local hiện hành hiển thị <strong>Build with Parameters</strong>; đây không phải wizard hỏi từng bước. Hoàn thành bộ lựa chọn trước khi bấm Build.</p>
+      <div class="table-wrap"><table class="param-table"><thead><tr><th>Tham số</th><th>Cách chọn</th><th>Lưu ý</th></tr></thead><tbody>
+        <tr><td><code>ENVIRONMENT</code></td><td>Environment được job cho phép, ví dụ <code>pt</code></td><td>Luôn bắt buộc. Các tên environment khác chỉ dùng khi mapping/inventory đã sẵn sàng.</td></tr>
+        <tr><td><code>TARGET_SITE</code></td><td><code>DC</code> hoặc <code>DR</code></td><td>Luôn bắt buộc; đối chiếu với host và role trong change.</td></tr>
+        <tr><td><code>OGG_ENV_PROFILE</code></td><td><code>OGG for Oracle</code> hoặc <code>OGG for DAA</code></td><td>Tham số bổ sung của Jenkinsfile local, bắt buộc cả với SM. Chọn tương thích deployment và binary, không chỉ dựa vào default UI.</td></tr>
+        <tr><td><code>OGG_ACTION</code></td><td>Một trong 8 action bên dưới</td><td>Luôn bắt buộc. Đổi action xong phải rà lại các field phụ thuộc.</td></tr>
+        <tr><td><code>DEPLOYMENT</code></td><td>Một deployment cụ thể hoặc <code>*</code> khi được phép</td><td>Hướng dẫn này khuyến nghị chỉ rõ deployment cho mọi process action.</td></tr>
+        <tr><td><code>CREDENTIAL_NAME</code></td><td>Alias đã được cấp quyền</td><td>Không dùng wildcard; không nhập username/password.</td></tr>
+        <tr><td><code>EXTRACT</code> / <code>REPLICAT</code></td><td>Group cụ thể hoặc <code>*</code></td><td>Chỉ field đúng loại action có hiệu lực. Field UI còn hiện không đồng nghĩa được dùng.</td></tr>
+      </tbody></table></div>
+      <div class="table-wrap"><table class="action-table"><caption>Tất cả action đều cần environment/site/profile trên Jenkins local. Các cột dưới là input theo đối tượng.</caption><thead><tr><th>Action</th><th>Deployment</th><th>Alias</th><th>Process</th><th>Tiêu chí script PASS</th></tr></thead><tbody>
+        <tr><td><code>start_ext</code></td><td>Cụ thể</td><td>Bắt buộc</td><td>EXTRACT hoặc <code>*</code></td><td>Tất cả Extract đã chọn được xác minh <code>RUNNING</code>.</td></tr>
+        <tr><td><code>stop_ext</code></td><td>Cụ thể</td><td>Bắt buộc</td><td>EXTRACT hoặc <code>*</code></td><td>Tất cả Extract đã chọn được xác minh <code>STOPPED</code>.</td></tr>
+        <tr><td><code>start_rep</code></td><td>Cụ thể</td><td>Bắt buộc</td><td>REPLICAT hoặc <code>*</code></td><td>Tất cả Replicat đã chọn được xác minh <code>RUNNING</code>.</td></tr>
+        <tr><td><code>stop_rep</code></td><td>Cụ thể</td><td>Bắt buộc</td><td>REPLICAT hoặc <code>*</code></td><td>Tất cả Replicat đã chọn được xác minh <code>STOPPED</code>.</td></tr>
+        <tr><td><code>start_depl</code></td><td>Cụ thể hoặc <code>*</code></td><td>Bắt buộc</td><td>Không dùng</td><td>AdminClient hoàn tất request, không phát hiện lỗi.</td></tr>
+        <tr><td><code>stop_depl</code></td><td>Cụ thể hoặc <code>*</code></td><td>Bắt buộc</td><td>Không dùng</td><td>AdminClient hoàn tất request, không phát hiện lỗi.</td></tr>
+        <tr><td><code>start_sm</code></td><td>Không dùng</td><td>Không dùng</td><td>Không dùng</td><td>Launcher qua grace period hoặc native script kết thúc với mã 0.</td></tr>
+        <tr><td><code>stop_sm</code></td><td>Không dùng</td><td>Không dùng</td><td>Không dùng</td><td>Native stop script kết thúc với mã 0.</td></tr>
+      </tbody></table></div>
+      <p class="caption">Theo cập nhật dropdown: process action hiển thị deployment, alias và process tương ứng; deployment action ẩn EXTRACT/REPLICAT; SM action ẩn deployment/alias/process. Jenkinsfile local có thể suy ra deployment duy nhất cho named start process; vẫn nên chọn tường minh để dễ kiểm tra và audit.</p>
+      <div class="note warning"><strong class="label">Không suy rộng từ danh sách dropdown</strong><p>Bản local hiện hành khai báo mapping PT cho DC/DR; bản <code>v2310</code> có mapping và khả năng khác. Việc một giá trị xuất hiện trong dropdown không chứng minh nó hợp lệ ở site/environment đã chọn. Mapping rỗng cũng không phải lớp chặn mọi thao tác rộng như SM hoặc deployment wildcard.</p></div>
+    </section>
+
+    <section id="jenkins" aria-labelledby="h-jenkins">
+      <div class="section-head"><h2 id="h-jenkins">Chạy Jenkins từng bước</h2><span class="eyebrow">Một action / một build</span></div>
+      <p class="reading">Ví dụ minh họa: khởi động Extract <code>EXT24P</code> trong <code>ogg_oracle03</code> tại <code>pt / DR</code>, alias <code>OGGHUB_CORELIVE</code>. Đây là bộ tham số ví dụ từ tài liệu, không phải đề nghị thực thi trên hệ thống hiện tại.</p>
+      <ol class="steps">
+        <li><div class="step-body"><h3>Mở job và kiểm tra nguồn mã</h3><p>Từ một <a href="#evidence">link run đã cung cấp</a>, mở job cha của đúng branch/environment. Kiểm tra Jenkins controller, SCM branch/revision, quyền truy cập và lịch sử build đang chạy. Không bấm Rebuild một run cũ trước khi xem lại toàn bộ tham số.</p><p class="gate">Điều kiện tiếp tục: job và mã triển khai đúng với change đã được phê duyệt.</p></div></li>
+        <li><div class="step-body"><h3>Chọn environment, site và profile</h3><p>Chọn <code>ENVIRONMENT=pt</code>, <code>TARGET_SITE=DR</code>, <code>OGG_ENV_PROFILE=OGG for Oracle</code> cho ví dụ này. Kiểm tra mapping host của DR và profile trên chính host đó.</p><p>Không coi nhãn environment là bằng chứng prod/dev. Bản local chọn tier theo Jenkins controller; profile DAA và Oracle phải phù hợp deployment thực tế.</p></div></li>
+        <li><div class="step-body"><h3>Chọn action và đối tượng</h3><p>Chọn <code>OGG_ACTION=start_ext</code>, <code>DEPLOYMENT=ogg_oracle03</code>, <code>CREDENTIAL_NAME=OGGHUB_CORELIVE</code>, <code>EXTRACT=EXT24P</code>. Không chọn Replicat cho Extract action.</p><p>Với action khác, dùng ma trận ở trên. Khi muốn thao tác diện rộng, phải xác nhận phạm vi wildcard riêng trước khi khởi chạy.</p></div></li>
+        <li><div class="step-body"><h3>Bấm Build và theo dõi validation</h3><p>Mở Console Output hoặc Stage View. Bản local thực hiện <code>Validate selection</code> rồi <code>Resolve OGG target</code>. Đối chiếu giá trị đã resolve với ticket; validation sai thì dừng, sửa input hoặc mapping, không cố bỏ qua bước kiểm tra.</p></div></li>
+        <li><div class="step-body"><h3>Kiểm tra màn hình Confirm OGG action</h3><p>Rà environment, site, action, deployment, process, alias, profile và mô tả ý nghĩa kết quả. Người có quyền phê duyệt chọn <strong>Run action</strong> khi tất cả khớp; nếu sai, hủy build. Bản local đặt timeout xác nhận <strong>10 phút</strong>.</p><p>Code local không cấu hình nhóm <code>submitter</code> riêng trong input; quyền phê duyệt phải được kiểm soát theo phân quyền Jenkins và quy trình thay đổi.</p></div></li>
+        <li><div class="step-body"><h3>Theo dõi chuẩn bị runtime và thực thi</h3><p>Sau xác nhận, bản local tạo pod Ansible, checkout SCM, kiểm tra inventory và secret site trong Vault, rồi chạy action. Job source profile và gọi Bash dưới user <code>oracle</code>. Mỗi group site phải resolve đúng một host.</p><p class="gate">Approval xảy ra trước kiểm tra inventory/Vault. Approval không có nghĩa mọi điều kiện runtime đã đạt.</p></div></li>
+        <li><div class="step-body"><h3>Đọc summary và kiểm tra hậu thao tác</h3><p>Tìm <code>FINAL OGG ACTION SUMMARY</code>, <code>VERDICT</code>, <code>Exit code</code> và <code>Log file</code>. Đối chiếu action/deployment/process. Với ví dụ này, xác minh <code>EXT24P=RUNNING</code>, kiểm tra thêm lag/checkpoint và lỗi vận hành theo baseline.</p><p>Timeout execution của Jenkins local là <strong>30 phút</strong>; không có automatic retry. Timeout/fail cần kiểm tra trạng thái thực tế trước khi chạy lại.</p></div></li>
+        <li><div class="step-body"><h3>Gắn evidence và đóng action</h3><p>Lưu URL build vừa thực thi, revision, tham số không nhạy cảm, người phê duyệt, console/summary, log host và kết quả hậu kiểm. Chỉ chuyển sang action kế tiếp khi tiêu chí của bước này đạt. Nếu fail, áp dụng <a href="#su-co">quy trình xử lý</a>.</p></div></li>
+      </ol>
+      <div class="sequence" aria-label="Thứ tự xử lý tham chiếu"><b>Validate</b><span>→</span><b>Resolve</b><span>→</span><b>Confirm</b><span>→</span><b>Pod / Checkout</b><span>→</span><b>Inventory / Vault</b><span>→</span><b>Run action</b><span>→</span><b>Verify / Evidence</b></div>
+      <p class="caption">Tên stage, nút và timeout ở phần này được bổ sung từ Jenkinsfile local hiện hành. Nếu job remote khác phiên bản, cần đối chiếu trước khi dùng nguyên trình tự UI.</p>
+    </section>
+
+    <section id="lenh" aria-labelledby="h-lenh">
+      <div class="section-head"><h2 id="h-lenh">Cú pháp &amp; ví dụ script</h2><span class="eyebrow">Tham chiếu có kiểm soát</span></div>
+      <p>Đường dẫn OGG PT theo yêu cầu: <code>/home/oracle/profile/op_ogg_actions.sh</code>. Các lệnh dưới đây là <strong>ví dụ minh họa</strong> cho người vận hành được ủy quyền; không phải bước bắt buộc chạy trực tiếp sau Jenkins. Không chạy lại cùng action qua SSH nếu chưa đánh giá lần chạy Jenkins.</p>
+      <div class="codebox"><div class="code-head"><span>INTERFACE HIỆN HÀNH · BASH</span><button class="control copy" type="button" data-copy="syntax">Sao chép</button></div><pre id="syntax"><code># Process: deployment đứng trước credential alias.
+bash /home/oracle/profile/op_ogg_actions.sh &lt;start_ext|stop_ext|start_rep|stop_rep&gt; &lt;deployment&gt; &lt;credential_alias&gt; &lt;process&gt;
+
+# Deployment:
+bash /home/oracle/profile/op_ogg_actions.sh &lt;start_depl|stop_depl&gt; &lt;deployment&gt; &lt;credential_alias&gt;
+
+# ServiceManager: chỉ có action, không truyền alias/deployment/process.
+bash /home/oracle/profile/op_ogg_actions.sh &lt;start_sm|stop_sm&gt;</code></pre></div>
+      <p class="caption">Các chuỗi trong dấu <code>&lt;…&gt;</code> là placeholder mô tả cú pháp, không phải lệnh có thể chạy nguyên văn. Tài liệu cũ dùng <code>sh</code>; dùng <code>bash</code> tường minh để phù hợp implementation hiện hành.</p>
+      <h3>Ví dụ 8 action riêng biệt</h3>
+      <p class="caption">Danh sách tra cứu, <strong>không phải một batch cần chạy liên tiếp</strong>. Chỉ chọn đúng một dòng theo change. Thay site/profile/đối tượng bằng giá trị đã xác minh.</p>
+      <div class="table-wrap"><table class="action-table"><thead><tr><th>Action</th><th>Lệnh minh họa độc lập</th></tr></thead><tbody>
+        <tr><td>Start Extract</td><td><code>bash /home/oracle/profile/op_ogg_actions.sh start_ext ogg_oracle03 OGGHUB_CORELIVE EXT24P</code></td></tr>
+        <tr><td>Stop Extract</td><td><code>bash /home/oracle/profile/op_ogg_actions.sh stop_ext ogg_oracle03 OGGHUB_CORELIVE EXT24P</code></td></tr>
+        <tr><td>Start Replicat</td><td><code>bash /home/oracle/profile/op_ogg_actions.sh start_rep ogg_daa03 OGGHUB_CORELIVE RKKPL01</code></td></tr>
+        <tr><td>Stop Replicat</td><td><code>bash /home/oracle/profile/op_ogg_actions.sh stop_rep ogg_daa03 OGGHUB_CORELIVE RKKPL01</code></td></tr>
+        <tr><td>Start Deployment</td><td><code>bash /home/oracle/profile/op_ogg_actions.sh start_depl ogg_oracle03 OGGHUB_CORELIVE</code></td></tr>
+        <tr><td>Stop Deployment</td><td><code>bash /home/oracle/profile/op_ogg_actions.sh stop_depl ogg_oracle03 OGGHUB_CORELIVE</code></td></tr>
+        <tr><td>Start SM</td><td><code>bash /home/oracle/profile/op_ogg_actions.sh start_sm</code></td></tr>
+        <tr><td>Stop SM</td><td><code>bash /home/oracle/profile/op_ogg_actions.sh stop_sm</code></td></tr>
+      </tbody></table></div>
+      <h3>Ví dụ TLS với một action</h3>
+      <div class="codebox"><div class="code-head"><span>VÍ DỤ · SAU KHI SOURCE PROFILE ĐÃ XÁC MINH</span><button class="control copy" type="button" data-copy="tls-example">Sao chép</button></div><pre id="tls-example"><code>export OGG_INSECURE_TLS=false
+export OGG_CLIENT_TLS_CAPATH=/u01/OracleGoldenGate/OGG_Certs/RootCA_cert.pem
+bash /home/oracle/profile/op_ogg_actions.sh start_rep ogg_daa03 OGGHUB_CORELIVE RKKPL01</code></pre></div>
+      <p>Script chọn <code>ADMINCLIENT_BIN</code> nếu có override; nếu không, dùng binary DAA khi deployment khớp <code>DAA_DEPLOYMENT</code>, các deployment khác dùng binary DB. Alias được dùng trong CONNECT tới deployment; deployment action kết nối ngữ cảnh <code>ServiceManager</code>. SM action gọi native script, không cần AdminClient CONNECT.</p>
+      <p class="caption">Cấu hình mặc định của script local: <code>OGG_ENDPOINT=https://localhost:7801</code>; <code>OGG_COMMAND_TIMEOUT=60</code> giây mỗi command; start/stop attempts = <code>15</code>; poll interval = <code>2</code> giây; SM grace = <code>1</code> giây. Đây không phải SLA tổng thời gian chạy và có thể bị profile/environment override.</p>
+      <div class="note warning"><strong class="label">Không dùng cú pháp lịch sử hoặc mật khẩu trong lệnh</strong><p>Bỏ các ví dụ cũ thiếu alias hoặc đặt alias trước deployment. Không đưa password, token, nội dung Vault hay credential store vào command, Console Output hoặc HTML evidence.</p></div>
+    </section>
+
+    <section id="wildcard" aria-labelledby="h-wildcard">
+      <div class="section-head"><h2 id="h-wildcard">Kiểm soát wildcard</h2><span class="eyebrow">Blast radius</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Vị trí <code>*</code></th><th>Phạm vi thật</th><th>Điều kiện</th></tr></thead><tbody>
+        <tr><td>Process của Extract / Replicat</td><td>Tất cả group đúng loại trong <strong>một deployment cụ thể</strong>, kể cả group không nằm trong mapping Jenkins.</td><td>Snapshot qua INFO ALL, validate trước khi phát lệnh; không có group phù hợp thì fail. Không dùng deployment wildcard trong process action.</td></tr>
+        <tr><td>Deployment của <code>start_depl</code> / <code>stop_depl</code></td><td>Tất cả deployment mà ServiceManager được kết nối quản lý; không giới hạn Oracle/DAA hay list trong Jenkins.</td><td>Alias có quyền SM. Lệnh wildcard được gửi tới AdminClient; PASS chỉ là hoàn tất request, không xác minh health từng deployment.</td></tr>
+        <tr><td>Alias hoặc pattern từng phần</td><td>Không được hỗ trợ</td><td>Không dùng <code>EXT*</code>, <code>ogg_*</code>, <code>?</code>, pattern bracket hoặc alias <code>*</code>.</td></tr>
+      </tbody></table></div>
+      <p><strong>Trên Jenkins:</strong> chọn giá trị literal <code>*</code> trong field được hỗ trợ, không nhập thêm dấu nháy như một phần tên. Pipeline phải quote khi truyền đối số xuống shell. <strong>Trong Bash:</strong> viết <code>'*'</code> hoặc <code>\*</code> để tránh shell mở rộng thành danh sách file.</p>
+      <div class="codebox"><div class="code-head"><span>VÍ DỤ BULK · CHỈ KHI TOÀN BỘ PHẠM VI ĐÃ ĐƯỢC PHÊ DUYỆT</span></div><pre><code># Ví dụ độc lập: stop tất cả Replicat trong đúng một deployment.
+bash /home/oracle/profile/op_ogg_actions.sh stop_rep ogg_daa03 OGGHUB_CORELIVE '*'
+
+# Ví dụ độc lập: start TẤT CẢ deployment thuộc ServiceManager.
+bash /home/oracle/profile/op_ogg_actions.sh start_depl '*' OGGHUB_CORELIVE</code></pre></div>
+      <ul>
+        <li>Ghi danh sách đối tượng trước thao tác; người phê duyệt phải thấy và chấp nhận toàn bộ phạm vi.</li>
+        <li>Process đã ở trạng thái đích được bỏ qua. Script phát lệnh tường minh cho snapshot đã validate, không gửi raw wildcard process.</li>
+        <li>Trong xác minh process wildcard, thay đổi tập group làm action fail. Không tự nhận thêm hoặc bỏ bớt group trong lần chạy.</li>
+        <li>Thao tác bulk không transactional. Sau fail, kiểm tra từng đối tượng; không mặc định chạy wildcard đảo chiều.</li>
+      </ul>
+    </section>
+
+    <section id="switchover" aria-labelledby="h-switchover">
+      <div class="section-head"><h2 id="h-switchover">Quy trình phối hợp switchover</h2><span class="eyebrow">Có điểm dừng bắt buộc</span></div>
+      <div class="note warning"><strong class="label">Điều kiện tiên quyết: kế hoạch switchover theo topology đã phê duyệt</strong><p>Đây là khung phối hợp vận hành, chưa phải runbook chuyển role database có thể thực thi độc lập. Không có đủ thông tin để quy định chính xác process nguồn/đích, checkpoint cutover, lệnh database, đảo chiều replication hoặc routing ứng dụng. Thiếu một trong các thông tin này thì <strong>NO-GO</strong>; không tự suy diễn từ 8 action OGG.</p></div>
+      <h3>Hoàn thiện ma trận điều phối trước cửa sổ thay đổi</h3>
+      <div class="table-wrap"><table><caption>Mẫu cần điền vào change; không phải trạng thái hay kết quả thực tế.</caption><thead><tr><th>Thông tin bắt buộc</th><th>Nội dung cần chốt</th></tr></thead><tbody>
+        <tr><td>Site / role</td><td>Site active hiện tại, site đích, host/database, hướng capture/apply, phương án ngăn ghi đồng thời.</td></tr>
+        <tr><td>Danh sách action</td><td>Thứ tự từng build: environment → site → profile → action → deployment → alias → process. Ghi trạng thái kỳ vọng và evidence của từng bước.</td></tr>
+        <tr><td>Cutover gate</td><td>Điểm dừng ghi, marker/checkpoint đối chiếu, cách chứng minh trail/apply đã drain và không còn giao dịch cần xử lý.</td></tr>
+        <tr><td>Quyền điều phối</td><td>Người quyết định GO/NO-GO, DBA database, OGG owner, application/network owner và người phê duyệt Jenkins.</td></tr>
+        <tr><td>Khôi phục</td><td>Điểm còn có thể quay lui, điều kiện không được quay lui, tiêu chí đối soát và runbook recovery/rollback được phê duyệt.</td></tr>
+      </tbody></table></div>
+      <ol class="steps">
+        <li><div class="step-body"><h3>Chốt GO / NO-GO và ghi baseline</h3><p>Change owner cùng DBA/OGG xác nhận topology, phạm vi, backup/recovery và người trực. Ghi trạng thái hai site, process, lag/checkpoint, lỗi đang tồn tại và revision job/script. Không có thay đổi OGG khác chồng lấn.</p><p class="gate">Gate: ma trận điều phối đầy đủ và baseline được chấp nhận.</p></div></li>
+        <li><div class="step-body"><h3>Quiesce ứng dụng và kiểm soát nguồn ghi</h3><p>Application owner dừng hoặc chặn nguồn ghi theo runbook ứng dụng. DBA xác minh các nguồn ghi, giao dịch và cơ chế fencing theo kế hoạch. OGG operational script không thực hiện bước này.</p><p class="gate">Gate: nguồn ghi đã được kiểm soát; có bằng chứng từ application/database, không chỉ từ Jenkins.</p></div></li>
+        <li><div class="step-body"><h3>Xác minh drain đến điểm cutover</h3><p>OGG owner kiểm tra capture, trail, checkpoint và apply tới marker được thống nhất. Không chỉ dựa vào lag bằng 0 hay status RUNNING. Mọi bước pause capture hoặc apply phải nằm đúng vị trí trong kế hoạch topology, tránh dừng consumer khi còn dữ liệu chưa xử lý.</p><p class="gate">Gate: DBA/OGG xác nhận dữ liệu đến điểm cutover đã được xử lý và đáp ứng tiêu chí nhất quán đã chốt.</p></div></li>
+        <li><div class="step-body"><h3>Thực hiện các action OGG phía nguồn theo ma trận</h3><p>Với từng action được phê duyệt, chạy quy trình Jenkins ở phần trên, lưu build URL và hậu kiểm trước khi sang bước kế tiếp. Chỉ dừng process/deployment/SM khi kế hoạch yêu cầu; không mặc định stop toàn bộ hoặc dùng wildcard.</p><p>Giữ nguyên các service dùng chung ngoài phạm vi. Việc stop Extract không chứng minh Replicat đã apply hết dữ liệu, và stop Deployment/SM không thay thế việc xác minh từng process.</p><p class="gate">Gate: các đối tượng trong phạm vi đạt trạng thái yêu cầu; các đối tượng ngoài phạm vi không bị ảnh hưởng.</p></div></li>
+        <li><div class="step-body"><h3>Bàn giao chuyển role và hướng dịch vụ</h3><p>DBA database thực hiện quy trình chuyển role riêng; các owner liên quan xử lý routing, fencing và cấu hình replication nếu có. Xác minh vai trò mới và quyền ghi trước khi mở ứng dụng. Không có action OGG nào trong tài liệu này thực hiện database switchover hoặc tự đảo chiều Extract/Replicat.</p><p class="gate">Gate: role/routing đúng và không tồn tại tình huống hai site cùng được phép ghi ngoài thiết kế.</p></div></li>
+        <li><div class="step-body"><h3>Khởi động các thành phần OGG phía đích khi cần</h3><p>Nếu kế hoạch cần khởi động hạ tầng, bảo đảm SM khả dụng trước khi quản lý deployment và deployment khả dụng trước khi quản lý process. Chỉ thực hiện <code>start_sm</code>/<code>start_depl</code> khi cần, hậu kiểm health riêng sau mỗi bước. Thứ tự Extract/Replicat, hướng replication và cấu hình chống loop phải được topology/runbook phê duyệt quy định.</p><p>Chạy từng action <code>start_ext</code>/<code>start_rep</code> đúng site/deployment/group trong ma trận. Không mặc định start mọi process hoặc giữ nguyên cấu hình của chiều cũ.</p><p class="gate">Gate: process cần thiết RUNNING, checkpoint tiến triển đúng hướng, không có lỗi apply/capture hoặc loop.</p></div></li>
+        <li><div class="step-body"><h3>Kiểm thử, mở ghi và giám sát sau chuyển đổi</h3><p>Chỉ mở traffic/ghi khi DBA, OGG và application owner cùng chấp nhận các gate trước. Thực hiện smoke test và đối soát theo kế hoạch; theo dõi giao dịch, replication, lỗi và chỉ số ứng dụng trong khoảng thời gian đã thống nhất. Không tự đặt ngưỡng lag hoặc thời gian giám sát thay cho tiêu chuẩn của hệ thống.</p><p class="gate">Gate: role mới, dữ liệu, luồng giao dịch và replication đáp ứng tiêu chí nghiệm thu; trạng thái site cũ đúng kế hoạch.</p></div></li>
+        <li><div class="step-body"><h3>Đóng change hoặc kích hoạt phương án khôi phục</h3><p>Tổng hợp evidence từng build cùng bằng chứng database/application, mốc thời gian và người phê duyệt. Nếu gate không đạt, dừng chuỗi, bảo toàn evidence và để change owner quyết định recovery/rollback theo runbook. Sau khi site mới đã phát sinh ghi, không tự đảo action hoặc chuyển role ngược.</p><p class="gate">Gate đóng change: kết quả được owner liên quan xác nhận, có đầy đủ bằng chứng và bàn giao giám sát.</p></div></li>
+      </ol>
+    </section>
+
+    <section id="ket-qua" aria-labelledby="h-ket-qua">
+      <div class="section-head"><h2 id="h-ket-qua">Đọc kết quả &amp; nghiệm thu</h2><span class="eyebrow">PASS có giới hạn</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Loại thao tác</th><th>PASS chứng minh gì?</th><th>Phải kiểm tra thêm</th></tr></thead><tbody>
+        <tr><td>Extract / Replicat</td><td>Named process hoặc toàn bộ process trong wildcard snapshot đạt trạng thái đích qua INFO ALL. Process đã đúng trạng thái có thể được skip.</td><td>Đúng group/site, checkpoint tiến triển theo kỳ vọng, lag, report/errors và tính nhất quán dữ liệu. RUNNING không có nghĩa đã bắt kịp.</td></tr>
+        <tr><td>Deployment</td><td>AdminClient hoàn tất yêu cầu start/stop, không phát hiện lỗi.</td><td>Trạng thái deployment và các service/process liên quan. Không coi request completion là health verification.</td></tr>
+        <tr><td>ServiceManager start</td><td>Launcher không lỗi sớm trong grace period hoặc native script kết thúc mã 0.</td><td>SM thực sự hoạt động, endpoint/console khả dụng, log startup không lỗi. Grace period không phải kiểm tra health.</td></tr>
+        <tr><td>ServiceManager stop</td><td>Native stop script kết thúc mã 0.</td><td>SM đã dừng theo cách kiểm tra được phê duyệt; không dùng PASS thay cho xác minh trạng thái.</td></tr>
+      </tbody></table></div>
+      <h3>Định dạng summary cần tìm trong log</h3>
+      <div class="codebox"><div class="code-head"><span>MẪU TRƯỜNG THÔNG TIN · KHÔNG PHẢI OUTPUT THỰC TẾ</span></div><pre><code>================ FINAL OGG ACTION SUMMARY ================
+Action: &lt;action vừa chạy&gt;
+Deployment: &lt;deployment hoặc N/A&gt;
+Process: &lt;process hoặc N/A&gt;
+Result: &lt;mô tả kết quả&gt;
+VERDICT: &lt;PASS hoặc FAIL&gt;
+Exit code: &lt;mã trả về&gt;
+Log file: &lt;đường dẫn log trên host&gt;
+Reason: &lt;lý do khi có lỗi&gt;</code></pre></div>
+      <p>Đối chiếu đồng thời trạng thái Jenkins, <code>VERDICT</code>, exit code và hậu kiểm. Exit code 0 riêng lẻ không chứng minh switchover thành công. Input sai sớm có thể kết thúc trước khi tạo log/summary; khi đó lưu lỗi validation trong console.</p>
+      <p>Script local mặc định ghi log dưới <code>${OGG_VAR_HOME}/log</code>, tên <code>ogg_&lt;action&gt;_&lt;YYYYmmdd_HHMMSS&gt;_&lt;PID&gt;.log</code>. Dùng đường dẫn <code>Log file</code> thực tế vì profile có thể override <code>LOG_DIR</code>. SM start có thêm launcher log riêng.</p>
+      <h3>Hồ sơ tối thiểu cho mỗi action</h3>
+      <ul>
+        <li>Change/ticket và mục tiêu; thời gian/múi giờ bắt đầu, kết thúc; người thực thi/phê duyệt.</li>
+        <li>Build URL, SCM revision, environment/site, host thực chạy, profile, action, deployment và process. Alias chỉ ghi nếu chính sách nội bộ cho phép.</li>
+        <li>Console/summary, exit code, log path và bản log được lưu ở nơi có kiểm soát truy cập; không mặc định log host đã được Jenkins archive.</li>
+        <li>Evidence trước/sau: process status, health deployment/SM, checkpoint/lag và kiểm tra ứng dụng/dữ liệu khi thuộc phạm vi.</li>
+        <li>Kết luận đạt/không đạt, sai lệch, biện pháp xử lý và liên kết build tiếp theo nếu có. Không lưu password, token hay nội dung Vault.</li>
+      </ul>
+    </section>
+
+    <section id="su-co" aria-labelledby="h-su-co">
+      <div class="section-head"><h2 id="h-su-co">Xử lý khi không đạt</h2><span class="eyebrow">Dừng · đánh giá · quyết định</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Biểu hiện</th><th>Hành động phù hợp</th></tr></thead><tbody>
+        <tr><td>Input/mapping sai, field không hợp lệ</td><td>Kiểm tra environment/site/action và tên đã khai báo. Chọn deployment cụ thể cho process. Không sửa validation để vượt kiểm tra.</td></tr>
+        <tr><td>UI không ẩn field theo action</td><td>Đối chiếu phiên bản job và hỗ trợ Active Choices/UI của bản hiện hành. Backend validation vẫn quyết định field có hiệu lực. Không nới global CSP/Script Security để chữa nhanh.</td></tr>
+        <tr><td>Inventory không đúng một host; thiếu Vault key, SSH hoặc sudo lỗi</td><td>Dừng và nhờ owner kiểm tra mapping/secret/quyền. Không fallback sang site hoặc credential khác. Approval trước đó chưa chứng minh runtime đã sẵn sàng.</td></tr>
+        <tr><td>CA/TLS, alias hoặc AdminClient lỗi</td><td>Kiểm tra profile trong cùng session, CA/endpoint, alias của user oracle, binary DB/DAA và quyền truy cập. Không hardcode password hoặc tự bật insecure TLS.</td></tr>
+        <tr><td>Không lấy được lock</td><td>Kiểm tra lần chạy đang giữ lock và trạng thái host/job. Chỉ xử lý stale lock theo quy trình đã phê duyệt sau khi xác minh; không tự xóa hoặc steal lock.</td></tr>
+        <tr><td>Process ABENDED, không đạt RUNNING/STOPPED, inventory process thay đổi</td><td>Lưu INFO ALL/report/log; kiểm tra toàn bộ đối tượng đã chọn. Xác định nguyên nhân trước khi retry. Script không force-kill hay tự recovery.</td></tr>
+        <tr><td>Jenkins timeout/abort hoặc mất kết nối</td><td>Không suy ra action đã rollback hoặc process đã dừng. Kiểm tra trạng thái thực trên host và các process có thể đã đổi; phối hợp owner trước lần chạy tiếp theo.</td></tr>
+        <tr><td>Deployment/SM PASS nhưng health không đạt</td><td>Đánh dấu hậu kiểm không đạt, dừng bước phụ thuộc và kiểm tra native/launcher/service log. PASS trong trường hợp này chỉ phản ánh command/launcher completion.</td></tr>
+        <tr><td>Bulk action fail một phần hoặc switchover không qua gate</td><td>Lập danh sách trạng thái từng đối tượng, bảo toàn evidence, báo change owner. Không tự chạy wildcard ngược hoặc đảo role. Recovery/rollback cần kế hoạch và phê duyệt riêng.</td></tr>
+      </tbody></table></div>
+      <div class="note warning"><strong class="label">Không chạy lại chỉ vì build đỏ</strong><p>Script có thể đã thay đổi một phần trước khi lỗi. Quy tắc skip process đã đạt trạng thái không phải bảo đảm mọi thao tác đều an toàn để retry. Cần xác định trạng thái thực và phạm vi còn lại trước khi có quyết định mới.</p></div>
+    </section>
+
+    <section id="evidence" aria-labelledby="h-evidence">
+      <div class="section-head"><h2 id="h-evidence">Links &amp; evidence</h2><span class="eyebrow">Nguồn do yêu cầu cung cấp</span></div>
+      <p>Các URL nội bộ dưới đây được giữ nguyên. Người đọc cần kết nối mạng nội bộ/VPN và quyền tương ứng. Tài liệu không tự tải dữ liệu từ các hệ thống này.</p>
+      <div class="table-wrap"><table class="evidence-table"><thead><tr><th>Tham chiếu</th><th>Liên kết / đường dẫn</th><th>Trạng thái kiểm chứng</th></tr></thead><tbody>
+        <tr><td>Pipeline operation tasks and switchover</td><td><a href="https://gitlab.techcombank.com.vn/ito/application-operation/database/oci/-/blob/feature/nguyennd/pipelines/Jenkinsfile_OGG_operation_SwitchOver.groovy" target="_blank" rel="noopener noreferrer">Jenkinsfile_OGG_operation_SwitchOver.groovy ↗</a></td><td>Link được cung cấp. Chưa kiểm tra nội dung remote, revision hoặc khả năng switchover.</td></tr>
+        <tr><td>Script OGG PT</td><td><code>/home/oracle/profile/op_ogg_actions.sh</code></td><td>Đường dẫn theo yêu cầu. Chưa đối chiếu file trên host với bản local.</td></tr>
+        <tr><td>Jenkins Run #40</td><td><a href="https://jenkins-dev2.techcombank.com.vn/job/ITO/job/database-operation/job/on-cloud/job/ogg-operation/job/feature%252Fnguyennd/40/" target="_blank" rel="noopener noreferrer">Jenkins Job #40 ↗</a></td><td>Chưa xác minh tham số, approval, console hoặc kết quả.</td></tr>
+        <tr><td>Jenkins Run #41</td><td><a href="https://jenkins-dev2.techcombank.com.vn/job/ITO/job/database-operation/job/on-cloud/job/ogg-operation/job/feature%252Fnguyennd/41/" target="_blank" rel="noopener noreferrer">Jenkins Job #41 ↗</a></td><td>Chưa xác minh tham số, approval, console hoặc kết quả.</td></tr>
+        <tr><td>Jenkins Run #42</td><td><a href="https://jenkins-dev2.techcombank.com.vn/job/ITO/job/database-operation/job/on-cloud/job/ogg-operation/job/feature%252Fnguyennd/42/" target="_blank" rel="noopener noreferrer">Jenkins Job #42 ↗</a></td><td>Chưa xác minh tham số, approval, console hoặc kết quả.</td></tr>
+      </tbody></table></div>
+      <h3>Cách bổ sung evidence khi có quyền truy cập</h3>
+      <ol>
+        <li>Mở từng run, ghi thời gian, revision, environment/site, action, target và người phê duyệt từ dữ liệu thật. Không gán trước run #40/#41/#42 cho các bước start/stop hoặc cutover.</li>
+        <li>Thu thập console/summary và hậu kiểm tương ứng; phân biệt kết quả command với kết quả dịch vụ và nghiệm thu dữ liệu.</li>
+        <li>Gắn build vào đúng dòng action trong change. Ba số build liên tiếp không đủ chứng minh một chuỗi switchover hoàn chỉnh.</li>
+        <li>Rà soát/redact dữ liệu nhạy cảm trước khi chia sẻ; lưu evidence trong hệ thống nội bộ được cấp quyền.</li>
+      </ol>
+    </section>
+
+    <section id="nguon" aria-labelledby="h-nguon">
+      <div class="section-head"><h2 id="h-nguon">Nguồn &amp; khác biệt phiên bản</h2><span class="eyebrow">Truy xuất nội dung</span></div>
+      <ol class="sources">
+        <li><a href="jenkins_ogg_operational_pipeline_requirements.md">Jenkins OGG Operational Pipeline Requirements</a><small>Nguồn chính: environment/site/action, dropdown theo action, credential alias, TLS và cập nhật wildcard.</small></li>
+        <li><a href="ogg_operational_actions_script_specification.md">OGG Operational Actions Script Specification</a><small>Nguồn chính: Section 5 mô tả validation, lock, execution/state verification, PASS/FAIL; New update 2 xác lập đủ 8 action và thứ tự argument hiện hành.</small></li>
+        <li><a href="../jenkins/Jenkinsfile_ogg_operational.groovy">Jenkinsfile local hiện hành</a><small>Đối chiếu bổ sung: profile bắt buộc, mapping, dynamic UI, approval, inventory/Vault, Ansible và timeout. Không khẳng định đồng nhất với pipeline remote.</small></li>
+        <li><a href="../scripts/op_ogg_actions.sh">op_ogg_actions.sh local</a><small>Đối chiếu bổ sung: interface Bash, TLS mặc định, timeout/poll, native ServiceManager script và định dạng log/summary.</small></li>
+        <li><a href="../jenkins/Jenkinsfile_ogg_operational_v2310.groovy">Jenkinsfile local v2310</a><small>Bản khác: dropdown tiêu chuẩn, mapping hạn chế và không hỗ trợ wildcard. Không áp dụng nguyên hướng dẫn UI/wildcard hiện hành cho bản này.</small></li>
+        <li><a href="https://github.com/tt-a1i/archify" target="_blank" rel="noopener noreferrer">Archify trên GitHub ↗</a><small>Tham khảo thiết kế viewer: nền navy tối / nền sáng trung tính, cyan accent, panel viền mảnh, side rail, toolbar gọn và monospace cho thông tin kỹ thuật. Không nhúng hoặc thực thi mã thư viện Archify.</small></li>
+      </ol>
+      <h3>Quy tắc giải quyết nội dung lịch sử</h3>
+      <ul>
+        <li><strong>Thứ tự argument:</strong> dùng <code>action → deployment → credential alias → process</code>. Cú pháp cũ thiếu alias hoặc alias đứng trước deployment đã bị thay thế.</li>
+        <li><strong>Start và stop:</strong> áp dụng đủ 8 action theo New update 2, không giới hạn 4 stop action ở phần đầu đặc tả.</li>
+        <li><strong>Native SM script:</strong> Section 5 và code local dùng đúng <code>${SM_HOME}/bin/startSM.sh</code>/<code>stopSM.sh</code>, hoặc override. Một đoạn lịch sử cuối đặc tả nhắc fallback <code>start_sm.sh</code>; không áp dụng fallback đó cho implementation local hiện hành.</li>
+        <li><strong>UI và profile:</strong> yêu cầu gốc chưa liệt kê profile; Jenkinsfile local bổ sung <code>OGG_ENV_PROFILE</code>. Phải kiểm tra bản triển khai để biết field và stage thật sự.</li>
+        <li><strong>Switchover:</strong> không biến các thao tác start/stop đơn lẻ thành lời khẳng định có orchestration liên site, database role switch, fencing hoặc rollback.</li>
+      </ul>
+      <p class="caption">Các liên kết file local hoạt động khi HTML được mở cùng cấu trúc thư mục hiện tại. Nội dung báo cáo, CSS và JavaScript đã nằm trong một file; đọc offline không cần CDN hoặc font mạng. Link evidence cần quyền truy cập nội bộ.</p>
+    </section>
+    <footer><p><strong>OGG Operational &amp; Switchover · Tài liệu hướng dẫn nội bộ</strong><br>Bản biên soạn từ nguồn local; không phải biên bản thực thi hoặc xác nhận thay đổi thành công. Không chứa secret và không thực hiện bất kỳ action OGG nào.</p><p id="copy-status" role="status" aria-live="polite"></p></footer>
+  </main>
+</div>
+<script>
+(function () {
+  'use strict';
+  var root = document.documentElement;
+  var themeButton = document.getElementById('theme-toggle');
+  function isDark() {
+    if (root.dataset.theme) return root.dataset.theme === 'dark';
+    return !window.matchMedia('(prefers-color-scheme: light)').matches;
+  }
+  function labelTheme() {
+    themeButton.textContent = isDark() ? 'Chuyển giao diện sáng' : 'Chuyển giao diện tối';
+  }
+  themeButton.addEventListener('click', function () {
+    root.dataset.theme = isDark() ? 'light' : 'dark';
+    labelTheme();
+  });
+  labelTheme();
+  var media = window.matchMedia('(prefers-color-scheme: light)');
+  if (media.addEventListener) media.addEventListener('change', labelTheme);
+  var status = document.getElementById('copy-status');
+  document.querySelectorAll('[data-copy]').forEach(function (button) {
+    var resetTimer;
+    button.addEventListener('click', async function () {
+      var block = document.getElementById(button.dataset.copy);
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('Clipboard unavailable');
+        await navigator.clipboard.writeText(block.textContent);
+        button.textContent = 'Đã sao chép';
+        status.textContent = 'Đã sao chép ví dụ. Kiểm tra phạm vi và phê duyệt trước khi sử dụng.';
+      } catch (error) {
+        var range = document.createRange();
+        range.selectNodeContents(block);
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        button.textContent = 'Đã chọn văn bản';
+        status.textContent = 'Trình duyệt không cho sao chép tự động. Văn bản đã được chọn; dùng Ctrl+C hoặc thao tác Sao chép trên thiết bị.';
+      }
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(function () { button.textContent = 'Sao chép'; }, 3200);
+    });
+  });
+  var links = Array.from(document.querySelectorAll('#index a'));
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        links.forEach(function (link) {
+          if (link.getAttribute('href') === '#' + entry.target.id) link.setAttribute('aria-current', 'location');
+          else link.removeAttribute('aria-current');
+        });
+      });
+    }, { rootMargin: '-90px 0px -60% 0px', threshold: 0 });
+    document.querySelectorAll('main section[id]').forEach(function (section) { observer.observe(section); });
+  }
+})();
+</script>
+</body>
+</html>
